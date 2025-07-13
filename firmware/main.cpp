@@ -14,6 +14,7 @@
 #include "port.h"
 #include "tunerstudio.h"
 #include "indication.h"
+#include "analog.h"
 
 #include "wideband_config.h"
 
@@ -32,6 +33,7 @@ int main() {
     InitConfiguration();
 
     // Fire up all of our threads
+	initAnalogOut();
     StartSampling();
     InitPumpDac();
     StartHeaterControl();

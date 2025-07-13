@@ -10,15 +10,15 @@
 #include "pump_dac.h"
 #include "port.h"
 #include "pump_control.h"
-
 #include <rusefi/math.h>
+#include "analog.h"
 
 // this same header is imported by rusEFI to get struct layouts and firmware version
 #include "../for_rusefi/wideband_can.h"
 
 static Configuration* configuration;
 
-static THD_WORKING_AREA(waCanTxThread, 512);
+static THD_WORKING_AREA(waCanTxThread, 256);
 void CanTxThread(void*)
 {
     chRegSetThreadName("CAN Tx");
@@ -31,6 +31,7 @@ void CanTxThread(void*)
         for (int ch = 0; ch < AFR_CHANNELS; ch++)
         {
             SendCanForChannel(ch);
+            setAnalogOut(ch);
         }
 
         prev = chThdSleepUntilWindowed(prev, chTimeAddX(prev, TIME_MS2I(WBO_TX_PERIOD_MS)));
@@ -114,20 +115,6 @@ void CanRxThread(void*)
                 // data2 contains heater gain in percent (0-200)
                 float pumpGain = frame.data8[1] * 0.01f;
                 SetPumpGainAdjust(clampF(0, pumpGain, 1));
-            }
-        }
-        // If it's a bootloader entry request, reboot to the bootloader!
-        else if ((frame.DLC == 0 || frame.DLC == 1) && CAN_ID(frame) == WB_BL_ENTER)
-        {
-            // If 0xFF (force update all) or our ID, reset to bootloader, otherwise ignore
-            if (frame.DLC == 0 || frame.data8[0] == 0xFF || frame.data8[0] == GetConfiguration()->CanIndexOffset)
-            {
-                SendAck();
-
-                // Let the message get out before we reset the chip
-                chThdSleep(50);
-
-                NVIC_SystemReset();
             }
         }
         // Check if it's an "index set" message
