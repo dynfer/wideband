@@ -1,8 +1,5 @@
 #include "hal.h"
-#include "ch.h"
-#include "pwm.h"
 #include <cstdint>
-#include "sampling.h"
 #include <rusefi/math.h>
 
 #include "wideband_config.h"
@@ -10,10 +7,10 @@
 
 #ifdef ANALOG_PWM_DEVICE
 
-static Pwm analogPwm(ANALOG_PWM_DEVICE);
+static constexpr pwmcnt_t analogPwmPeriod = 4096;
 static const PWMConfig analogPwmConfig = {
     .frequency = STM32_SYSCLK,
-    .period = 4096,
+    .period = analogPwmPeriod,
     .callback = nullptr,
     .channels = {
         {PWM_OUTPUT_ACTIVE_HIGH | PWM_COMPLEMENTARY_OUTPUT_ACTIVE_LOW, nullptr},
@@ -30,7 +27,7 @@ static const PWMConfig analogPwmConfig = {
 
 void initAnalogOut(void)
 {
-    analogPwm.Start(analogPwmConfig);
+    pwmStart(&ANALOG_PWM_DEVICE, &analogPwmConfig);
 }
 
 void setAnalogOut(uint8_t ch, float lambda) {
@@ -40,8 +37,9 @@ void setAnalogOut(uint8_t ch, float lambda) {
     }
 
     lambda = clampF(0.68f, lambda, 1.36f);
-    float duty = (lambda - 0.68f) / 0.68f;
-    analogPwm.SetDuty(ANALOG_PWM_CHANNEL, duty);
+    constexpr float ticksPerLambda = analogPwmPeriod / 0.68f;
+    pwmcnt_t width = (lambda - 0.68f) * ticksPerLambda;
+    pwmEnableChannel(&ANALOG_PWM_DEVICE, ANALOG_PWM_CHANNEL, width);
 }
 
 #endif // defined ANALOG_PWM_DEVICE

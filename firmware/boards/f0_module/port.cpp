@@ -36,21 +36,6 @@ const ADCConversionGroup convGroup =
     ADC_CHSELR_CHSEL0 | ADC_CHSELR_CHSEL2 | ADC_CHSELR_CHSEL3
 };
 
-static float AverageSamples(adcsample_t* buffer, size_t idx)
-{
-    uint32_t sum = 0;
-
-    for (size_t i = 0; i < ADC_OVERSAMPLE; i++)
-    {
-        sum += buffer[idx];
-        idx += ADC_CHANNEL_COUNT;
-    }
-
-    constexpr float scale = VCC_VOLTS / (ADC_MAX_COUNT * ADC_OVERSAMPLE);
-
-    return (float)sum * scale;
-}
-
 void AnalogSampleStart()
 {
     adcStartConversion(&ADCD1, &convGroup, adcBuffer, ADC_OVERSAMPLE);
@@ -60,17 +45,31 @@ AnalogResult AnalogSampleFinish()
 {
     adcDoneSemaphore.wait(TIME_INFINITE);
 
+    uint32_t nernstSum = 0;
+    uint32_t pumpSum = 0;
+    uint32_t groundSum = 0;
+
+    for (size_t i = 0; i < ADC_OVERSAMPLE; i++)
+    {
+        size_t idx = i * ADC_CHANNEL_COUNT;
+        nernstSum += adcBuffer[idx];
+        pumpSum += adcBuffer[idx + 1];
+        groundSum += adcBuffer[idx + 2];
+    }
+
+    constexpr float scale = VCC_VOLTS / (ADC_MAX_COUNT * ADC_OVERSAMPLE);
+
     return
     {
         .ch =
         {
             {
-                .NernstVoltage = AverageSamples(adcBuffer, 0) * (1.0 / NERNST_INPUT_GAIN),
-                .PumpCurrentVoltage = AverageSamples(adcBuffer, 1),
+                .NernstVoltage = (float)nernstSum * scale * (1.0 / NERNST_INPUT_GAIN),
+                .PumpCurrentVoltage = (float)pumpSum * scale,
                 .HeaterSupplyVoltage = 0,
             },
         },
-        .VirtualGroundVoltageInt = AverageSamples(adcBuffer, 2),
+        .VirtualGroundVoltageInt = (float)groundSum * scale,
 
         // TODO!
         .McuTemp = 0,
